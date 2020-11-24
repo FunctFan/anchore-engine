@@ -202,6 +202,12 @@ jobs:
             - caches/*
 
   functional_tests:
+    parameters:
+      py_version:
+        type: string
+      tox_env:
+        type: string
+
     machine:
       image: ubuntu-1604:202007-01
     environment:
