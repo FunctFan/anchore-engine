@@ -1,25 +1,41 @@
 from anchore_engine.analyzers.utils import dig
 
-def handler(findings, artifact):
+
+def save_entry(findings, engine_entry, pkg_key=None):
+    if not pkg_key:
+        pkg_location = engine_entry.get('location', "")
+        if pkg_location:
+            # derive the key from the entries 'location' value
+            pkg_key = pkg_location
+        else:
+            # derive the key from a 'virtual' location
+            pkg_name = engine_entry.get('name', "")
+            pkg_version = engine_entry.get('version', engine_entry.get('latest', "")) # rethink this... ensure it's right
+            pkg_key = "/virtual/npmpkg/{}-{}".format(pkg_name, pkg_version)
+
+    findings['package_list']['pkgs.npms']['base'][pkg_key] = engine_entry
+
+
+def translate_and_save_entry(findings, artifact):
     """
     Handler function to map syft results for npm package type into the engine "raw" document format.
     """
     pkg_key = artifact['locations'][0]['path']
-    homepage = artifact['metadata'].get('homepage', '')
-    author = artifact['metadata'].get('author')
-    authors = artifact['metadata'].get('authors', [])
+    name = artifact['name']
+    homepage = dig(artifact, 'metadata', 'homepage', default="")
+    author = dig(artifact, 'metadata', 'author', default="")
+    authors = dig(artifact, 'metadata', 'authors', default=[])
     origins = [] if not author else [author]
     origins.extend(authors)
 
     pkg_value = {
-            'name': artifact['name'],
+            'name': name,
             'versions': [artifact['version']],
             'latest': artifact['version'],
-            'sourcepkg': artifact['metadata'].get('url', homepage),
+            'sourcepkg': dig(artifact, 'metadata', 'url', default=homepage),
             'origins': origins,
-            'lics': artifact['metadata'].get('licenses', []),
+            'lics': dig(artifact, 'metadata', 'licenses', default=[]),
         }
 
     # inject the artifact document into the "raw" analyzer document
-    findings['package_list']['pkgs.npms']['base'][pkg_key] = pkg_value
-
+    save_entry(findings, pkg_value, pkg_key)

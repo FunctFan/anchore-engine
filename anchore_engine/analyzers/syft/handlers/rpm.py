@@ -3,7 +3,14 @@ import re
 from anchore_engine.analyzers.utils import dig
 
 
-def handler(findings, artifact):
+def save_entry(findings, engine_entry, pkg_key=None):
+    if not pkg_key:
+        pkg_key = engine_entry.get('name', "")
+
+    findings['package_list']['pkgs.allinfo']['base'][pkg_key] = engine_entry
+
+
+def translate_and_save_entry(findings, artifact):
     """
     Handler function to map syft results for an alpine package type into the engine "raw" document format.
     """
@@ -31,12 +38,10 @@ def _all_package_info(findings, artifact):
         'size': str(dig(artifact, 'metadata', 'size', default="N/A")),
         'license': dig(artifact, 'metadata', 'license', default="N/A"),
     }
-           
     if pkg_value['arch'] == 'amd64':
         pkg_value['arch'] = 'x86_64'
 
-    findings['package_list']['pkgs.allinfo']['base'][name] = pkg_value
-
+    save_entry(findings, pkg_value, name)
 
 def _all_packages(findings, artifact):
     name = artifact['name']

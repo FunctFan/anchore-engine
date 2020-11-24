@@ -449,8 +449,10 @@ def make_staging_dirs(rootdir, use_cache_dir=None):
         raise Exception("passed in root directory must exist (" + str(rootdir) + ")")
 
     rando = str(uuid.uuid4())
+    unpackdir = os.path.join(rootdir, rando)
+
     ret = {
-        'unpackdir': os.path.join(rootdir, rando),
+        'unpackdir': unpackdir,
         'copydir': os.path.join(rootdir, rando, "raw"),
         'rootfs': os.path.join(rootdir, rando, "rootfs"),
         'outputdir': os.path.join(rootdir, rando, "output"),
@@ -467,6 +469,20 @@ def make_staging_dirs(rootdir, use_cache_dir=None):
                 os.makedirs(ret[k])
         except Exception as err:
             raise Exception("unable to prep staging directory - exception: " + str(err))
+
+    # XXX This highly questionable environment variable usage is the only way
+    # found to programmatically inject hintsfiles without requiring the
+    # hintsfile to exist in the image. Otherwise, it would require every
+    # permutation of a hintsfile to be an actual unique image. It leverages the
+    # fact that Anchore Engine will not try to extract the hinstfile if it has
+    # already been unpacked in the unpack directory.
+    try:
+        if os.environ.get('ANCHORE_TEST_HINTSFILE'):
+            test_hints = os.environ['ANCHORE_TEST_HINTSFILE']
+            destination = os.path.join(unpackdir, 'anchore_hints.json')
+            shutil.copyfile(test_hints, destination)
+    except Exception as err:
+        logger.debug("testing injection of hintsfile failed: %s", str(err))
 
     return ret
 
@@ -841,7 +857,7 @@ def run_anchore_analyzers(staging_dirs, imageDigest, imageId, localconfig):
             if data:
                 analyzer_report[analyzer_output][analyzer_output_el] = {'base': data }
 
-    syft_results = anchore_engine.analyzers.syft.catalog_image(image=copydir)
+    syft_results = anchore_engine.analyzers.syft.catalog_image(image=copydir, unpackdir=unpackdir)
 
     anchore_engine.analyzers.utils.merge_nested_dict(analyzer_report, syft_results)
 
@@ -939,6 +955,7 @@ def analyze_image(userId, manifest, image_record, tmprootdir, localconfig, regis
             dockerfile_contents = None
 
         staging_dirs = make_staging_dirs(tmprootdir, use_cache_dir=use_cache_dir)
+        unpackdir = staging_dirs['unpackdir']
 
         if image_source == 'docker-archive':
             try:

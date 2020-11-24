@@ -3,7 +3,13 @@ import re
 from anchore_engine.analyzers.utils import dig
 
 
-def handler(findings, artifact):
+def save_entry(findings, engine_entry, pkg_key=None):
+    if not pkg_key:
+        pkg_key = engine_entry.get('name', "")
+
+    findings['package_list']['pkgs.allinfo']['base'][pkg_key] = engine_entry
+
+def translate_and_save_entry(findings, artifact):
     """
     Handler function to map syft results for an debian package type into the engine "raw" document format.
     """
@@ -37,7 +43,7 @@ def _all_package_info(findings, artifact):
     else:
         source = "N/A"
 
-    license = dig(artifact, 'licenses')
+    license = dig(artifact, 'licenses') or dig(artifact, 'license')
     if license:
         license = " ".join(license)
     else:
@@ -54,7 +60,7 @@ def _all_package_info(findings, artifact):
         'type': "dpkg",
     }
 
-    findings['package_list']['pkgs.allinfo']['base'][name] = pkg_value
+    save_entry(findings, pkg_value, name)
 
 def _all_packages_plus_source(findings, artifact):
     name = artifact['name']
@@ -66,18 +72,21 @@ def _all_packages_plus_source(findings, artifact):
     if origin_package:
         findings['package_list']['pkgs_plus_source.all']['base'][origin_package] = version
 
+
 def _all_packages(findings, artifact):
     name = artifact['name']
     version = artifact["version"]
     if name and version:
         findings['package_list']['pkgs.all']['base'][name] = version
 
+
 def _all_package_files(findings, artifact):
     for file in dig(artifact, 'metadata', 'files', default=[]):
         original_path = file.get('path')
         if not original_path.startswith("/"):
-            # the 'alpine-baselayout' package is installed relative to root, however, syft reports this as an absolute path
+            # the 'alpine-baselayout' package is installed relative to root,
+            # however, syft reports this as an absolute path
             original_path = "/" + original_path
-        
+
         # anchore-engine considers all parent paths to also be a registered apkg path (except root)
         findings['package_list']['pkgfiles.all']['base'][original_path] = "DPKGFILE"
