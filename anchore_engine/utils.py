@@ -215,6 +215,34 @@ def run_command_list(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, *
     return pipes.returncode, stdout_result, stderr_result
 
 
+def run_check(cmd, **kwargs):
+    cmd = run_sanitize(cmd)
+    logger.debug("running cmd: %s", ' '.join(cmd))
+    code, stdout, stderr = run_command_list(cmd, **kwargs)
+
+    try:
+        stdout_stream = stdout.decode('utf-8')
+        stderr_stream = stderr.decode('utf-8')
+    except AttributeError:
+        # it is a str already, no need to decode
+        pass
+
+    stdout_stream = stdout_stream.splitlines()
+    stderr_stream = stderr_stream.splitlines()
+
+    # Always log stdout as debug
+    for line in stdout_stream:
+        logger.debug(line)
+
+    if code != 0:
+        # When non-zero exit status, log stderr as error
+        for line in stderr_stream:
+            logger.error(line)
+        raise CommandException(cmd, code, stdout, stderr)
+
+    return stdout, stderr
+
+
 def run_command(cmdstr, **kwargs):
     return run_command_list(shlex.split(cmdstr), **kwargs)
 
@@ -247,6 +275,23 @@ class AnchoreException(Exception):
 
     def to_dict(self):
         return {self.__class__.__name__: dict((key, value) for key, value in vars(self).items() if not key.startswith('_'))}
+
+
+class CommandException(Exception):
+
+    def __init__(self, cmd, code, stdout, stderr, msg=None):
+        self.msg = msg or "Non-zero exit status code when running subprocess"
+        self.cmd = ' '.join(cmd) if isinstance(cmd, list) else cmd
+        self.code = code
+        self.stderr = stderr
+        self.stdout = stdout
+
+    def __repr__(self):
+        return "{}: cmd={}, rc={}".format(self.msg, self.cmd, self.code)
+
+    def __str__(self):
+        return "{}: cmd={}, rc={}".format(self.msg, self.cmd, self.code)
+
 
 def ensure_bytes(obj):
     return obj.encode('utf-8') if type(obj) != bytes else obj
